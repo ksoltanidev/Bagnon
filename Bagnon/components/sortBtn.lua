@@ -16,12 +16,82 @@ local moves = {};
 local frame = CreateFrame("Frame");
 local t = 0;
 local current = nil;
+local isGuildBankSort = false; -- Flag to track if we're sorting guild bank
 
 local function GetIDFromLink(link)
 	return link and tonumber(string.match(link, "item:(%d+)"));
 end
 
-local function DoMoves()
+-- Ascension WoW: Detect bank type based on first tab name
+-- Returns "personal", "realm", or "guild"
+local function GetAscensionBankType()
+	local numTabs = GetNumGuildBankTabs()
+	if numTabs == 0 then return nil end
+
+	local firstTabName = GetGuildBankTabInfo(1)
+	if firstTabName == "Personal Bank" then
+		return "personal"
+	elseif firstTabName == "Realm Bank" then
+		return "realm"
+	else
+		return "guild"
+	end
+end
+
+-- Guild Bank version of DoMoves
+local function DoGuildBankMoves()
+	while (current ~= nil or #moves > 0) do
+		if current ~= nil then
+			if CursorHasItem() then
+				local _, id = GetCursorInfo();
+				if (current ~= nil and current.id == id) then
+					if (current.sourcetab ~= nil) then
+						PickupGuildBankItem(current.targettab, current.targetslot);
+						local link = GetGuildBankItemLink(current.targettab, current.targetslot);
+						if (current.id ~= GetIDFromLink(link)) then
+							return;
+						end
+					end
+				else
+					moves = {};
+					current = nil;
+					frame:Hide();
+					return;
+				end
+			else
+				if (current.sourcetab ~= nil) then
+					local link = GetGuildBankItemLink(current.targettab, current.targetslot);
+					if (current.id ~= GetIDFromLink(link)) then
+						return;
+					end
+				end
+				current = nil;
+			end
+		else
+			if (#moves > 0) then
+				current = table.remove(moves, 1);
+				if (current.sourcetab ~= nil) then
+					PickupGuildBankItem(current.sourcetab, current.sourceslot);
+					if CursorHasItem() == false then
+						return;
+					end
+					PickupGuildBankItem(current.targettab, current.targetslot);
+					local link = GetGuildBankItemLink(current.targettab, current.targetslot);
+					if (current.id == GetIDFromLink(link)) then
+						current = nil;
+					else
+						return;
+					end
+				end
+			end
+		end
+	end
+	frame:Hide();
+	isGuildBankSort = false;
+end
+
+-- Regular container version of DoMoves
+local function DoContainerMoves()
 	while (current ~= nil or #moves > 0) do
 		if current ~= nil then
 			if CursorHasItem() then
@@ -72,6 +142,14 @@ local function DoMoves()
 	frame:Hide();
 end
 
+local function DoMoves()
+	if isGuildBankSort then
+		DoGuildBankMoves()
+	else
+		DoContainerMoves()
+	end
+end
+
 local function CompareItems(lItem, rItem)
 	if (rItem.id == nil) then
 		return true;
@@ -101,6 +179,42 @@ local function BeginSort()
 	ClearCursor();
 end
 
+-- Sort function for guild bank (uses tab instead of bag)
+local function SortGuildBankTab(tabItems)
+	for i = 1, #tabItems, 1 do
+		local lowest = i;
+		for j = #tabItems, i + 1, -1 do
+			if (CompareItems(tabItems[lowest], tabItems[j]) == false) then
+				lowest = j;
+			end
+		end
+		if (i ~= lowest) then
+			-- store move
+			local move = {};
+			move.id = tabItems[lowest].id;
+			move.name = tabItems[lowest].name;
+			move.sourcetab = tabItems[lowest].tab;
+			move.sourceslot = tabItems[lowest].slot;
+			move.targettab = tabItems[i].tab;
+			move.targetslot = tabItems[i].slot;
+			table.insert(moves, move);
+
+			-- swap items
+			local tmp = tabItems[i];
+			tabItems[i] = tabItems[lowest];
+			tabItems[lowest] = tmp;
+
+			-- swap slots
+			tmp = tabItems[i].slot;
+			tabItems[i].slot = tabItems[lowest].slot;
+			tabItems[lowest].slot = tmp;
+			tmp = tabItems[i].tab;
+			tabItems[i].tab = tabItems[lowest].tab;
+			tabItems[lowest].tab = tmp;
+		end
+	end
+end
+
 local function SortBag(bag)
 	for i = 1, #bag, 1 do
 		local lowest = i;
@@ -111,7 +225,7 @@ local function SortBag(bag)
 		end
 		if (i ~= lowest) then
 			-- store move
-			move = {};
+			local move = {};
 			move.id = bag[lowest].id;
 			move.name = bag[lowest].name;
 			move.sourcebag = bag[lowest].bag;
@@ -159,6 +273,29 @@ local function CreateBagFromID(bagID)
 		table.insert(bag, item);
 	end
 	return bag;
+end
+
+-- Create item list from guild bank tab
+local function CreateGuildBankTabItems(tabID)
+	local items = {};
+	local numSlots = 98; -- Guild bank tabs have 98 slots
+
+	for i = 1, numSlots, 1 do
+		local item = {};
+		local texture, count, locked = GetGuildBankItemInfo(tabID, i);
+		local link = GetGuildBankItemLink(tabID, i);
+
+		item.tab = tabID;
+		item.slot = i;
+		item.name = "<EMPTY>";
+		item.id = GetIDFromLink(link);
+		if (item.id ~= nil) then
+			item.count = count or 1;
+			item.name, _, item.quality, _, _, item.class, item.subclass, _, item.type, _, item.price = GetItemInfo(item.id);
+		end
+		table.insert(items, item);
+	end
+	return items;
 end
 
 frame:SetScript("OnUpdate", function()
@@ -212,6 +349,7 @@ function SortBtn:OnClick()
 	local bags = {};
 
 	if self.frameID == "inventory" then
+		isGuildBankSort = false;
 		for i = 0, NUM_BAG_FRAMES, 1 do
 			local bag = CreateBagFromID(i);
 			local type = select(2, GetContainerNumFreeSlots(i));
@@ -228,9 +366,8 @@ function SortBtn:OnClick()
 				end
 			end
 		end
-	end
-
-	if self.frameID == "bank" then
+	elseif self.frameID == "bank" then
+		isGuildBankSort = false;
 		local i = -1
 		local bag = CreateBagFromID(i);
 		local type = select(2, GetContainerNumFreeSlots(i));
@@ -263,15 +400,61 @@ function SortBtn:OnClick()
 				end
 			end
 		end
-	end
+	elseif self.frameID == "guildbank" then
+		isGuildBankSort = true;
 
+		local currentTab = GetCurrentGuildBankTab and GetCurrentGuildBankTab() or 0
 
-	BeginSort();
-	for k, v in pairs(bags) do
-		if v ~= nil then
-			SortBag(v);
+		if currentTab and currentTab > 0 then
+			-- Ascension: Detect bank type (personal, realm, or guild)
+			local bankType = GetAscensionBankType()
+			local canSort = false
+
+			if bankType == "personal" or bankType == "realm" then
+				-- Personal and Realm banks: player always has full permissions
+				canSort = true
+			else
+				-- Real guild bank: check permissions
+				local _, _, canView, canDeposit, _, remainingWithdrawals = GetGuildBankTabInfo(currentTab)
+				if canDeposit and (remainingWithdrawals == -1 or remainingWithdrawals > 0) then
+					canSort = true
+				end
+			end
+
+			if canSort then
+				local tabItems = CreateGuildBankTabItems(currentTab)
+				bags["GUILDBANK"] = tabItems
+			else
+				return
+			end
+		else
+			return
 		end
 	end
+
+	local bagCount = 0
+	for k, v in pairs(bags) do
+		if v ~= nil then
+			bagCount = bagCount + 1
+		end
+	end
+
+	if bagCount == 0 then
+		return
+	end
+
+	BeginSort();
+
+	for k, v in pairs(bags) do
+		if v ~= nil then
+			if isGuildBankSort then
+				SortGuildBankTab(v);
+			else
+				SortBag(v);
+			end
+		end
+	end
+
 	frame:Show();
 end
 
