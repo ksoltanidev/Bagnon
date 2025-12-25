@@ -16,6 +16,14 @@ BagnonDB:RegisterEvent('ADDON_LOADED')
 ASC_PERSONAL_BANK_OFFSET = 1000;
 ASC_REALM_BANK_OFFSET = 2000;
 
+local function IsPersonalBank()
+	return GuildBankFrame and GuildBankFrame.IsPersonalBank
+end
+
+local function IsRealmBank()
+	return GuildBankFrame and GuildBankFrame.IsRealmBank
+end
+
 --constants
 local L = BAGNON_FOREVER_LOCALS
 local CURRENT_VERSION = GetAddOnMetadata('Bagnon_Forever', 'Version')
@@ -145,7 +153,6 @@ function BagnonDB:PLAYER_LOGIN()
 
 
 	self:RegisterEvent('GUILDBANKFRAME_OPENED')
-	self:RegisterEvent('GUILDBANKFRAME_CLOSED')
 	self:RegisterEvent('GUILDBANKBAGSLOTS_CHANGED')
 	self:RegisterEvent('BANKFRAME_OPENED')
 	self:RegisterEvent('BANKFRAME_CLOSED')
@@ -192,19 +199,7 @@ end
 
 
 function BagnonDB:GUILDBANKFRAME_OPENED()
-	if HasJsonCacheData("BANK_PERMISSIONS_PAYLOAD", 0) then
-		local json = GetJsonCacheData("BANK_PERMISSIONS_PAYLOAD", 0)
-		if json then
-			local jsonObject = C_Serialize:FromJSON(json)
-			if jsonObject then
-				self.IsPersonalBank = jsonObject.IsPersonalBank
-				self.IsRealmBank = jsonObject.IsRealmBank
-			end
-		end
-	end
-	
-	
-	if (self.IsPersonalBank) then
+	if IsPersonalBank() then
 		for i = 1, 6 do
 			local avail = GetGuildBankTabInfo(i)
 			if type(avail) == "string" then
@@ -214,7 +209,7 @@ function BagnonDB:GUILDBANKFRAME_OPENED()
 		return
 	end
 
-	if (self.IsRealmBank) then
+	if IsRealmBank() then
 		for i = 1, 6 do
 			local avail = GetGuildBankTabInfo(i)
 			if type(avail) == "string" then
@@ -224,13 +219,8 @@ function BagnonDB:GUILDBANKFRAME_OPENED()
 	end
 end
 
-function BagnonDB:GUILDBANKFRAME_CLOSED()
-	self.IsPersonalBank = nil
-	self.IsRealmBank = nil
-end
-
 function BagnonDB:GUILDBANKBAGSLOTS_CHANGED()
-	if (self.IsPersonalBank) then
+	if IsPersonalBank() then
 		for i = 1, 6 do
 			local avail = GetGuildBankTabInfo(i)
 			if type(avail) == "string" then
@@ -240,7 +230,7 @@ function BagnonDB:GUILDBANKBAGSLOTS_CHANGED()
 		return
 	end
 
-	if (self.IsRealmBank) then
+	if IsRealmBank() then
 		for i = 1, 6 do
 			local avail = GetGuildBankTabInfo(i)
 			if type(avail) == "string" then
