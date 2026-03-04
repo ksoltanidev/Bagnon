@@ -5,3 +5,6 @@
 .lua/*
 .vscode
 .idea
+deploy.bat
+ASCENSION_BANKS.md
+CLAUDE.md
