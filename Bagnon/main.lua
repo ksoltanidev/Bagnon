@@ -332,10 +332,6 @@ function Bagnon:GUILDBANKFRAME_OPENED()
 		GuildBankFrame = CreateFrame("Frame", "GuildBankFrame")
 	end
 	-- Detect bank type from first tab name
-	local numTabs = GetNumGuildBankTabs()
-	local firstTabName = numTabs > 0 and GetGuildBankTabInfo(1) or nil
-	GuildBankFrame.IsPersonalBank = (firstTabName == "Personal Bank")
-	GuildBankFrame.IsRealmBank = (firstTabName == "Realm Bank")
 	if HasJsonCacheData("BANK_PERMISSIONS_PAYLOAD", 0) then
 		local json = GetJsonCacheData("BANK_PERMISSIONS_PAYLOAD", 0)
 		if json then
