@@ -331,7 +331,7 @@ function Bagnon:GUILDBANKFRAME_OPENED()
 	if not GuildBankFrame then
 		GuildBankFrame = CreateFrame("Frame", "GuildBankFrame")
 	end
-	-- Detect bank type from first tab name
+	-- Detect bank type
 	if HasJsonCacheData("BANK_PERMISSIONS_PAYLOAD", 0) then
 		local json = GetJsonCacheData("BANK_PERMISSIONS_PAYLOAD", 0)
 		if json then
